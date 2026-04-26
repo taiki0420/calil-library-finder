@@ -77,12 +77,46 @@
     #controls {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
+      padding: 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .controls-row {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
     }
+
+    .controls-row-2 {
+      gap: 8px;
+    }
+
+    .controls-or {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .address-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .address-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      outline: none;
+    }
+    .address-row input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,106,173,0.1); }
 
     .btn {
       display: inline-flex;
@@ -504,32 +538,48 @@
 
   <!-- Controls -->
   <div id="controls">
-    <button class="btn btn-outline" id="locate-btn">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-      </svg>
-      現在地を取得
-    </button>
+    <div class="controls-row">
+      <button class="btn btn-outline" id="locate-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+        </svg>
+        現在地を取得
+      </button>
 
-    <div id="location-chip">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-      </svg>
-      <span id="location-text">位置情報未取得</span>
+      <span class="controls-or">または</span>
+
+      <div class="address-row">
+        <input type="text" id="address-input" placeholder="住所・地名で検索（例: 渋谷区、大阪城）" autocomplete="off" />
+        <button class="btn btn-outline btn-sm" id="address-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          地名検索
+        </button>
+      </div>
     </div>
 
-    <select class="limit-select" id="limit-select">
-      <option value="5">5件</option>
-      <option value="10" selected>10件</option>
-      <option value="20">20件</option>
-    </select>
+    <div class="controls-row controls-row-2">
+      <div id="location-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span id="location-text">位置情報未取得</span>
+      </div>
 
-    <button class="btn btn-primary" id="search-btn" disabled>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-      検索
-    </button>
+      <select class="limit-select" id="limit-select">
+        <option value="5">5件</option>
+        <option value="10" selected>10件</option>
+        <option value="20">20件</option>
+      </select>
+
+      <button class="btn btn-primary" id="search-btn" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        図書館を検索
+      </button>
+    </div>
   </div>
 
   <!-- Main View -->
@@ -728,13 +778,49 @@
       settingsOverlay.classList.remove('open');
     }
 
-    // ── Geolocation ──
-    const locateBtn   = document.getElementById('locate-btn');
+    // ── Geolocation & Address Search ──
+    const locateBtn    = document.getElementById('locate-btn');
     const locationChip = document.getElementById('location-chip');
     const locationText = document.getElementById('location-text');
-    const searchBtn   = document.getElementById('search-btn');
+    const searchBtn    = document.getElementById('search-btn');
+    const addressInput = document.getElementById('address-input');
+    const addressBtn   = document.getElementById('address-btn');
 
     locateBtn.addEventListener('click', locateUser);
+    addressBtn.addEventListener('click', geocodeAddress);
+    addressInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') geocodeAddress(); });
+
+    async function geocodeAddress() {
+      const q = addressInput.value.trim();
+      if (!q) { showToast('地名または住所を入力してください', 'error'); return; }
+
+      addressBtn.disabled = true;
+      addressBtn.innerHTML = `<div class="spinner" style="width:12px;height:12px;border-width:2px;"></div>`;
+
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=ja`,
+          { headers: { 'Accept': 'application/json' } }
+        );
+        const data = await res.json();
+        if (!data || data.length === 0) {
+          showToast('場所が見つかりませんでした', 'error');
+          return;
+        }
+        state.lat = parseFloat(data[0].lat);
+        state.lng = parseFloat(data[0].lon);
+        const displayName = data[0].display_name.split(',')[0];
+        locationChip.className = 'active';
+        locationText.textContent = displayName;
+        searchBtn.disabled = false;
+        initMap();
+      } catch (err) {
+        showToast('住所検索に失敗しました', 'error');
+      } finally {
+        addressBtn.disabled = false;
+        addressBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 地名検索`;
+      }
+    }
 
     function locateUser() {
       if (!navigator.geolocation) {
